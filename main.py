@@ -2,9 +2,6 @@ from frequently_used import manipulate
 
 
 class Car(object):
-    """
-    behave on the closest ride for a car
-    """
     def __init__(self, key):
         self._id = key
         self._steps = 0
@@ -52,9 +49,9 @@ class Car(object):
     def taken_rides(self, value):
         self._taken_rides = value
 
-    def have_ride(self, ride):
+    def have_this(self, ride):
         distance_to_ride = abs(self._position[0] - ride.start[0]) + abs(self._position[1] - ride.start[1])
-        self._steps = self._steps + ride.distance + distance_to_ride
+        self._steps = self._steps + ride.distance + distance_to_ride - 1
         self._position = ride.finish
         self._taken_rides.append(ride)
 
@@ -65,9 +62,11 @@ class Car(object):
         return 'car no: {},' \
                ' position: {},' \
                ' steps: {},' \
-               ' available_rides:{}'.format(self._id,
+               ' taken_rides: {},' \
+               ' available_rides:{},'.format(self._id,
                                             self._position,
                                             self._steps,
+                                            self._taken_rides,
                                             self._available_rides)
 
 
@@ -80,6 +79,7 @@ class Ride(object):
         self._latest_finish = latest_finish
         self._distance = abs(self._start[0] - self._finish[0]) + abs(self._start[1] - self._finish[1])
         self._distance_from_car = int()
+        self._whole_distance = int()
 
     @property
     def id(self):
@@ -137,11 +137,17 @@ class Ride(object):
     def distance_from_car(self, value):
         self._distance_from_car = value
 
-    def distance_from(self, car_position):
-        self._distance_from_car = abs(self._start[0] - car_position[0]) + abs(self._start[1] - car_position[1])
+    @property
+    def whole_distance(self):
+        return self._whole_distance
 
-    def __lt__(self, other):
-        return self._distance_from_car < other.distance_from_car
+    @whole_distance.setter
+    def whole_distance(self, value):
+        self._whole_distance = value
+
+    def calculate_distances(self, car_position):
+        self._distance_from_car = abs(self._start[0] - car_position[0]) + abs(self._start[1] - car_position[1])
+        self._whole_distance = self._distance_from_car + self._distance
 
     def __str__(self):
         return 'id: {},' \
@@ -169,9 +175,11 @@ class CityMap(object):
         self._steps = next(self._extractor)
         self._rides_objects = list()
         self._cars_objects = list()
+        self._grouped_rides_in_time = list()
         self._running = True
         self.init_rides()
         self.init_cars()
+        self.group_rides()
         self.assign_rides()
 
     @property
@@ -222,6 +230,14 @@ class CityMap(object):
     def running(self, value):
         self._running = value
 
+    @property
+    def grouped_rides_in_time(self):
+        return self._grouped_rides_in_time
+
+    @grouped_rides_in_time.setter
+    def grouped_rides_in_time(self, value):
+        self._grouped_rides_in_time = value
+
     def init_rides(self):
         for ride_no in range(self._rides_no):
             a = next(self._extractor)
@@ -232,6 +248,7 @@ class CityMap(object):
             f = next(self._extractor)
             new_ride = Ride(ride_no, [a, b], [x, y], s, f)
             self._rides_objects.append(new_ride)
+        self._rides_objects.sort(key=lambda obj: obj.earliest_start)
 
     def init_cars(self):
         for car_no in range(self._cars_no):
@@ -241,31 +258,41 @@ class CityMap(object):
     def assign_rides(self):
         while self._running:
             for car in self._cars_objects:
-                self.calculate_trips(car.position)
-                car.available_rides = sorted(self.rides_objects)
+                for group in self._grouped_rides_in_time:
+                    if car.steps <= group[0].earliest_start:
+                        car.have_this(group[0])
+                        group.remove(group[0])
+                        print(car)
 
-                for ride in car.available_rides:
-                    whole_trip = ride.distance_from_car + ride.earliest_start
-                    if whole_trip < ride.latest_finish:
-                        if ride.earliest_start > car.steps:
-                            car.wait(ride.earliest_start - car.steps)
-                        car.have_ride(ride)
-                        self._rides_objects.pop(self._rides_objects.index(ride))
                         break
 
-            if self._rides_objects:
-                self._running = True
-            else:
-                self._running = False
+            self._running = False
 
     def calculate_trips(self, car_position):
         for ride in self._rides_objects:
-            ride.distance_from(car_position)
+            ride.calculate_distances(car_position)
+
+    def group_rides(self):
+        group = list()
+        whole = list()
+        start = self._rides_objects[0].earliest_start
+        for ride in self._rides_objects:
+            if ride.earliest_start == start:
+                group.append(ride)
+            else:
+                group = sorted(group, key=lambda obj: obj.distance)
+                whole.append(group)
+                start = ride.earliest_start
+                group = list()
+                group.append(ride)
+        group = sorted(group, key=lambda obj: obj.distance)
+        whole.append(group)
+        self._grouped_rides_in_time = whole
 
 
 def main():
     file_names = ['a_example.in', 'b_should_be_easy.in', 'c_no_hurry.in', 'd_metropolis.in', 'e_high_bonus.in']
-    file_index = 1
+    file_index = 0
     city_map = CityMap(file_names[file_index])
     with open('{}.out'.format(file_names[file_index][:-3]), 'w') as file:
         for car in city_map.cars_objects:
@@ -274,6 +301,13 @@ def main():
                 car_string += ' {}'.format(str(ride.id))
             car_string += '\n'
             file.write(car_string)
+
+    # with open('file.txt', 'w') as file:
+    #     for group in city_map.grouped_rides_in_time:
+    #         file.write('***************************************\n********************\n')
+    #         for ride in group:
+    #             file.write(str(ride))
+    #             file.write('\n')
 
 
 if __name__ == '__main__':
