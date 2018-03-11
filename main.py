@@ -4,9 +4,8 @@ from frequently_used import manipulate
 class Car(object):
     def __init__(self, key):
         self._id = key
-        self._steps = 0
+        self._steps = -1
         self._position = [0, 0]
-        self._available_rides = list()
         self._taken_rides = list()
 
     @property
@@ -34,14 +33,6 @@ class Car(object):
         self._steps = value
 
     @property
-    def available_rides(self):
-        return self._available_rides
-
-    @available_rides.setter
-    def available_rides(self, value):
-        self._available_rides = value
-
-    @property
     def taken_rides(self):
         return self._taken_rides
 
@@ -59,15 +50,8 @@ class Car(object):
         self._steps += steps
 
     def __str__(self):
-        return 'car no: {},' \
-               ' position: {},' \
-               ' steps: {},' \
-               ' taken_rides: {},' \
-               ' available_rides:{},'.format(self._id,
-                                            self._position,
-                                            self._steps,
-                                            self._taken_rides,
-                                            self._available_rides)
+        return 'car no: {}, position: {}, steps: {}, taken_rides: {}'.format(self._id, self._position, self._steps,
+                                                                             self._taken_rides)
 
 
 class Ride(object):
@@ -155,12 +139,10 @@ class Ride(object):
                ' finish: {},' \
                ' earliest_start: {},' \
                ' latest finish: {},' \
-               ' distance: {}'.format(self._id,
-                                      self._start,
-                                      self._finish,
-                                      self._earliest_start,
-                                      self._latest_finish,
-                                      self._distance)
+               ' distance: {},'\
+               ' whole_distance: {}'.format(self._id, self._start, self._finish, self._earliest_start,
+                                            self._latest_finish, self._distance,
+                                            self._whole_distance)
 
 
 class CityMap(object):
@@ -256,17 +238,42 @@ class CityMap(object):
             self._cars_objects.append(car)
 
     def assign_rides(self):
+        consumed_rides = list()
+        consumed_cars = list()
+        consume_car = False
         while self._running:
             for car in self._cars_objects:
-                for group in self._grouped_rides_in_time:
-                    if car.steps <= group[0].earliest_start:
-                        car.have_this(group[0])
-                        group.remove(group[0])
-                        print(car)
+                if car.steps <= self._steps:
+                    for ride in self._rides_objects:
+                        ride.calculate_distances(car.position)
+                        if car.steps + ride.whole_distance < self.steps:
+                            consume_car = False
+                            print(ride)
+                            if car.steps < ride.earliest_start:
+                                car.wait(ride.earliest_start-car.steps)
+                            car.have_this(ride)
+                            consumed_rides.append(ride)
+                            break
 
-                        break
+                        else:
+                            consume_car = True
+                    if consume_car:
+                        consumed_cars.append(car)
+                else:
+                    consumed_cars.append(car)
 
-            self._running = False
+                for ride in consumed_rides:
+                    if ride in self._rides_objects:
+                        self._rides_objects.remove(ride)
+
+            for car in consumed_cars:
+                if car in self._cars_objects:
+                    self._cars_objects.remove(car)
+
+            if len(consumed_rides) == self._rides_no or len(consumed_cars) == self._cars_no:
+                self._running = False
+            else:
+                self._running = True
 
     def calculate_trips(self, car_position):
         for ride in self._rides_objects:
@@ -292,7 +299,7 @@ class CityMap(object):
 
 def main():
     file_names = ['a_example.in', 'b_should_be_easy.in', 'c_no_hurry.in', 'd_metropolis.in', 'e_high_bonus.in']
-    file_index = 0
+    file_index = 3
     city_map = CityMap(file_names[file_index])
     with open('{}.out'.format(file_names[file_index][:-3]), 'w') as file:
         for car in city_map.cars_objects:
@@ -301,13 +308,6 @@ def main():
                 car_string += ' {}'.format(str(ride.id))
             car_string += '\n'
             file.write(car_string)
-
-    # with open('file.txt', 'w') as file:
-    #     for group in city_map.grouped_rides_in_time:
-    #         file.write('***************************************\n********************\n')
-    #         for ride in group:
-    #             file.write(str(ride))
-    #             file.write('\n')
 
 
 if __name__ == '__main__':
